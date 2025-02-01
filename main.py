@@ -19,8 +19,8 @@ def get_ai_response(prompt):
             "Content-Type": "application/json"
         }
 
-        # Randomly decide whether to introduce an NPC (40% chance)
-        introduce_npc = random.random() < 0.4  
+        # Randomly decide whether to introduce an NPC (30% chance)
+        introduce_npc = random.random() < 0.3  
 
         # AI prompt instructions
         system_prompt = (
@@ -29,8 +29,9 @@ def get_ai_response(prompt):
             "Ensure the response is no longer than 150 words to keep pacing tight. "
             "STRICTLY separate the scenario from player options. NEVER embed choices inside the scenario text. "
             "Options must be listed in a new paragraph starting with 'Options:'. "
-            "Each choice must be on its own line and formatted as '1. Choice'. "
-            "DO NOT append extra words after 'Options:'."
+            "Each choice must be a standalone sentence without numbering or bullets."
+            "DO NOT append extra words after 'Options:'. "
+            "DO NOT include 'Scenario:' or any introduction text like 'Welcome to the game!'."
         )
 
         if introduce_npc:
@@ -73,7 +74,11 @@ def play():
         if not user_input:
             return jsonify({"scenario": "Please enter a valid action.", "options": []})
 
-        ai_response = get_ai_response(f"Player chose to: {user_input}. What happens next?")
+        # Format user choice naturally (removing "You: <number>.")
+        formatted_user_input = user_input.lstrip("0123456789. ")  # Remove leading number and period
+        formatted_user_input = f"You {formatted_user_input[0].lower()}{formatted_user_input[1:]}"  # Convert to natural sentence
+
+        ai_response = get_ai_response(f"{formatted_user_input}. What happens next?")
 
         # Ensure scenario and options are extracted correctly
         scenario_text = ai_response.strip()
@@ -85,11 +90,17 @@ def play():
             scenario_text = split_parts[0].strip()
             options_text = split_parts[1].strip() if len(split_parts) > 1 else ""
 
-        # Ensure options are properly formatted and not incomplete
-        options = [opt.strip("- ").strip() for opt in options_text.split("\n") if opt.strip()]
+        # Remove any intro messages like "Start" or "Welcome to the game!"
+        scenario_text = scenario_text.replace("Start", "").replace("Welcome to the game!", "").strip()
+
+        # Remove all occurrences of "Scenario:" in the text
+        scenario_text = scenario_text.replace("Scenario:", "").strip()
+
+        # Ensure options are properly formatted and remove numbering
+        options = [opt.strip("- ").strip().lstrip("0123456789. ") for opt in options_text.split("\n") if opt.strip()]
 
         # Remove extra words if AI formats incorrectly
-        options = [opt for opt in options if not opt.lower().startswith("the lord of the castle") and "Options" not in opt]
+        options = [opt for opt in options if "Options" not in opt]
 
         # Ensure at least 3-4 options are valid (removing any incomplete ones)
         options = [opt for opt in options if len(opt.split()) > 3]  # Ensures full sentences

@@ -11,9 +11,7 @@
         <h1>🔹 AI Text Adventure 🔹</h1>
         
         <!-- AI-generated scenario display -->
-        <div id="game-scenario">
-            <p class="scenario-text"><strong>Scenario:</strong> Welcome to the game! You wake up in a dark forest. A path leads forward.</p>
-        </div>
+        <div id="game-scenario"></div>
 
         <!-- Multiple-choice options -->
         <div id="game-options">
@@ -41,7 +39,7 @@
             let optionsList = document.getElementById("options-list");
 
             // Create new user message
-            let userMessage = `<p class="user-text"><strong>You:</strong> ${choiceText}</p>`;
+            let userMessage = `<p class="user-text">${choiceText}</p>`;
             gameScenario.innerHTML = userMessage + gameScenario.innerHTML;
 
             optionsList.innerHTML = ""; // Clear previous options
@@ -55,7 +53,7 @@
             .then(response => response.json())
             .then(data => {
                 let formattedScenario = formatNPCDialogue(data.scenario);
-                let aiMessage = `<p class="scenario-text"><strong>Scenario:</strong> ${formattedScenario}</p>`;
+                let aiMessage = `<p class="scenario-text">${formattedScenario}</p>`;
                 gameScenario.innerHTML = aiMessage + gameScenario.innerHTML;
 
                 // Update options
@@ -78,7 +76,7 @@
             return text.replace(/"([^"]+)"/g, '<span class="npc-dialogue">"$1"</span>');
         }
 
-        // Initial API call
+        // Initial API call to start the game
         sendChoice("Start");
     </script>
 </body>
