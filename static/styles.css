@@ -1,0 +1,123 @@
+/* General Styling */
+body {
+    font-family: 'Arial', sans-serif;
+    background-color: #1a1a1a;
+    color: #f5f5f5;
+    text-align: center;
+    padding: 20px;
+    margin: 0;
+}
+
+/* Game Container */
+.game-container {
+    max-width: 600px;
+    margin: auto;
+    background-color: #2c2c2c;
+    padding: 20px;
+    border-radius: 10px;
+    box-shadow: 0px 4px 10px rgba(0, 0, 0, 0.3);
+}
+
+/* Game Title */
+h1 {
+    color: #f8c12c;
+    font-size: 24px;
+    margin-bottom: 10px;
+}
+
+/* Scenario Display */
+#game-scenario {
+    background-color: #333;
+    padding: 15px;
+    border-radius: 5px;
+    text-align: left;
+    max-height: 350px;
+    overflow-y: auto;
+    border: 1px solid #444;
+    font-size: 16px;
+    line-height: 1.5;
+}
+
+/* AI Scenario Styling */
+.scenario-text {
+    color: #ffdb58;
+    font-weight: bold;
+    margin-top: 10px;
+}
+
+/* User Input Styling */
+.user-text {
+    color: #f5f5f5;
+    font-weight: bold;
+    margin-top: 10px;
+}
+
+/* Game Response Styling */
+.game-response {
+    color: #9acd32;
+    font-weight: bold;
+    margin-top: 10px;
+}
+
+/* Multiple-Choice Options */
+#game-options {
+    margin-top: 10px;
+    text-align: left;
+}
+
+#game-options p {
+    font-weight: bold;
+    margin-bottom: 5px;
+}
+
+ul {
+    list-style-type: none;
+    padding: 0;
+}
+
+li {
+    margin: 5px 0;
+}
+
+/* Buttons for Actions */
+button {
+    padding: 12px;
+    background-color: #f8c12c;
+    color: #1a1a1a;
+    font-weight: bold;
+    border: none;
+    border-radius: 5px;
+    cursor: pointer;
+    display: block;
+    width: 100%;
+    margin-top: 5px;
+    font-size: 16px;
+    transition: background 0.3s ease;
+}
+
+button:hover {
+    background-color: #ffdb58;
+}
+
+/* User Input Box */
+input {
+    width: calc(100% - 24px);
+    padding: 12px;
+    margin-top: 10px;
+    border: none;
+    border-radius: 5px;
+    font-size: 16px;
+    background-color: #444;
+    color: #f5f5f5;
+}
+
+/* Mobile Responsiveness */
+@media screen and (max-width: 768px) {
+    .game-container {
+        width: 90%;
+    }
+
+    input {
+        width: calc(100% - 20px);
+    }
+}
