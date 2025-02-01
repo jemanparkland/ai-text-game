@@ -1,8 +1,11 @@
+import os
 from flask import Flask, render_template, request, jsonify
 import requests
-import config
 
 app = Flask(__name__)
+
+# Retrieve API key from environment variables
+API_KEY = os.getenv("MISTRAL_API_KEY")
 
 # Mistral API URL
 MISTRAL_API_URL = "https://api.mistral.ai/v1/chat/completions"
@@ -11,7 +14,7 @@ MISTRAL_API_URL = "https://api.mistral.ai/v1/chat/completions"
 def get_ai_response(prompt):
     try:
         headers = {
-            "Authorization": f"Bearer " + config.API_KEY,
+            "Authorization": f"Bearer {API_KEY}",
             "Content-Type": "application/json"
         }
 
