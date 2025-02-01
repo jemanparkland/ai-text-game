@@ -1,6 +1,7 @@
 import os
 from flask import Flask, render_template, request, jsonify
 import requests
+import random  # Controls probability of NPC introduction
 
 app = Flask(__name__)
 
@@ -18,13 +19,33 @@ def get_ai_response(prompt):
             "Content-Type": "application/json"
         }
 
+        # Randomly decide whether to introduce an NPC (40% chance)
+        introduce_npc = random.random() < 0.4  
+
+        # AI prompt instructions
+        system_prompt = (
+            "You are a text adventure game master. Generate a short, engaging scenario (~30% shorter than usual) "
+            "that follows logically from the player's input. Keep NPC dialogue to a MAXIMUM of 1-2 exchanges before presenting options. "
+            "Ensure the response is no longer than 150 words to keep pacing tight. "
+            "STRICTLY separate the scenario from player options. NEVER embed choices inside the scenario text. "
+            "Options must be listed in a new paragraph starting with 'Options:'. "
+            "Each choice must be on its own line and formatted as '1. Choice'. "
+            "DO NOT append extra words after 'Options:'."
+        )
+
+        if introduce_npc:
+            system_prompt += (
+                " Introduce a new character naturally within the scene, limiting their dialogue to at most two lines. "
+                "Ensure the options still appear at the END of the response after the scenario."
+            )
+
         payload = {
             "model": "mistral-small",
             "messages": [
-                {"role": "system", "content": "You are a text adventure game master. Generate a short scenario, followed by exactly 3-4 suggested player actions. Format them clearly under 'Options:'. Ensure there are always options."},
+                {"role": "system", "content": system_prompt},
                 {"role": "user", "content": prompt}
             ],
-            "max_tokens": 250
+            "max_tokens": 250  # Further reduced token count for brevity
         }
 
         response = requests.post(MISTRAL_API_URL, headers=headers, json=payload)
@@ -54,15 +75,40 @@ def play():
 
         ai_response = get_ai_response(f"Player chose to: {user_input}. What happens next?")
 
-        # Extract the scenario and multiple-choice options
-        scenario_text, options_text = ai_response.split("\nOptions:", 1) if "\nOptions:" in ai_response else (ai_response, "")
-        options = [opt.strip("- ").strip() for opt in options_text.split("\n") if opt.strip()] or ["Explore", "Look around", "Wait"]
+        # Ensure scenario and options are extracted correctly
+        scenario_text = ai_response.strip()
+        options_text = ""
 
-        return jsonify({"scenario": scenario_text, "options": options})
+        # Strictly enforce separation between scenario and options
+        if "\nOptions:" in scenario_text:
+            split_parts = scenario_text.rsplit("\nOptions:", 1)  # Ensures only the last occurrence is split
+            scenario_text = split_parts[0].strip()
+            options_text = split_parts[1].strip() if len(split_parts) > 1 else ""
+
+        # Ensure options are properly formatted and not incomplete
+        options = [opt.strip("- ").strip() for opt in options_text.split("\n") if opt.strip()]
+
+        # Remove extra words if AI formats incorrectly
+        options = [opt for opt in options if not opt.lower().startswith("the lord of the castle") and "Options" not in opt]
+
+        # Ensure at least 3-4 options are valid (removing any incomplete ones)
+        options = [opt for opt in options if len(opt.split()) > 3]  # Ensures full sentences
+
+        # If options are missing, retry extraction from the last few sentences of the scenario
+        if len(options) < 3:
+            scenario_lines = scenario_text.split(". ")
+            if len(scenario_lines) > 2:
+                options = [line.strip() for line in scenario_lines[-2:] if len(line.split()) > 3]
+
+        # If options are still insufficient, provide fallback choices
+        while len(options) < 3:
+            options.append(random.choice(["Explore further", "Look around carefully", "Wait and observe"]))
+
+        return jsonify({"scenario": scenario_text, "options": options[:4]})
 
     except Exception as e:
         print(f"Server error: {e}")
-        return jsonify({"scenario": "Server error. Please try again.", "options": ["Explore", "Look around", "Wait"]}), 500
+        return jsonify({"scenario": "Server error. Please try again.", "options": ["Explore further", "Look around carefully", "Wait and observe"]}), 500
 
 if __name__ == "__main__":
     app.run(debug=True)

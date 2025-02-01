@@ -45,6 +45,20 @@ h1 {
     margin-top: 10px;
 }
 
+/* NPC Dialogue Styling (NEW) */
+.npc-dialogue {
+    display: block;
+    font-style: italic;
+    background-color: #3a3a3a;
+    color: #ffdb58;
+    padding: 10px;
+    margin: 10px 0;
+    border-left: 5px solid #f8c12c;
+    border-radius: 5px;
+    font-size: 16px;
+    line-height: 1.6;
+}
+
 /* User Input Styling */
 .user-text {
     color: #f5f5f5;

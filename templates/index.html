@@ -10,7 +10,7 @@
     <div class="game-container">
         <h1>🔹 AI Text Adventure 🔹</h1>
         
-        <!-- AI-generated scenario display (Latest updates appear at the top) -->
+        <!-- AI-generated scenario display -->
         <div id="game-scenario">
             <p class="scenario-text"><strong>Scenario:</strong> Welcome to the game! You wake up in a dark forest. A path leads forward.</p>
         </div>
@@ -23,21 +23,25 @@
 
         <!-- Custom user input -->
         <input type="text" id="user-input" placeholder="Or type your own action...">
-        <button onclick="sendChoice()">Submit</button>
+        <button id="submit-btn">Submit</button>
     </div>
 
     <script>
-        function sendChoice(selectedOption = null) {
+        document.getElementById("submit-btn").addEventListener("click", function() {
             let userInputField = document.getElementById("user-input");
-            let userInput = selectedOption || userInputField.value.trim();
+            let userInput = userInputField.value.trim();
+            if (userInput) {
+                sendChoice(userInput);
+                userInputField.value = "";  // Clear input field
+            }
+        });
 
-            if (!userInput) return;
-
+        function sendChoice(choiceText) {
             let gameScenario = document.getElementById("game-scenario");
             let optionsList = document.getElementById("options-list");
 
-            // Create new user message and add to the top
-            let userMessage = `<p class="user-text"><strong>You:</strong> ${userInput}</p>`;
+            // Create new user message
+            let userMessage = `<p class="user-text"><strong>You:</strong> ${choiceText}</p>`;
             gameScenario.innerHTML = userMessage + gameScenario.innerHTML;
 
             optionsList.innerHTML = ""; // Clear previous options
@@ -46,30 +50,35 @@
             fetch("/play", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ choice: userInput })
+                body: JSON.stringify({ choice: choiceText })
             })
             .then(response => response.json())
             .then(data => {
-                // Add AI scenario response at the top
-                let aiMessage = `<p class="scenario-text"><strong>Scenario:</strong> ${data.scenario}</p>`;
+                let formattedScenario = formatNPCDialogue(data.scenario);
+                let aiMessage = `<p class="scenario-text"><strong>Scenario:</strong> ${formattedScenario}</p>`;
                 gameScenario.innerHTML = aiMessage + gameScenario.innerHTML;
 
-                // Update multiple-choice options
+                // Update options
                 if (data.options.length > 0) {
                     optionsList.innerHTML = "";
                     data.options.forEach(option => {
                         let li = document.createElement("li");
-                        li.innerHTML = `<button onclick="sendChoice('${option}')">${option}</button>`;
+                        let button = document.createElement("button");
+                        button.innerText = option;
+                        button.onclick = function() { sendChoice(option); };
+                        li.appendChild(button);
                         optionsList.appendChild(li);
                     });
                 }
-
-                // Clear input box
-                userInputField.value = "";
-            });
+            })
+            .catch(error => console.error("Error:", error));
         }
 
-        // Initial API call to get the first scenario and options
+        function formatNPCDialogue(text) {
+            return text.replace(/"([^"]+)"/g, '<span class="npc-dialogue">"$1"</span>');
+        }
+
+        // Initial API call
         sendChoice("Start");
     </script>
 </body>
