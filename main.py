@@ -5,7 +5,7 @@ import requests
 app = Flask(__name__)
 
 # Retrieve API key from environment variables
-API_KEY = os.getenv("MISTRAL_API_KEY")
+API_KEY = os.getenv("API_KEY")
 
 # Mistral API URL
 MISTRAL_API_URL = "https://api.mistral.ai/v1/chat/completions"
