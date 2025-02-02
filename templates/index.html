@@ -7,21 +7,41 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
 </head>
 <body>
-    <div class="game-container">
-        <h1>Adventure Quest</h1>
-        
-        <!-- AI-generated scenario display -->
-        <div id="game-scenario"></div>
+    <div class="container">
+        <!-- Main Game Section -->
+        <div class="game-container">
+            <h1>Adventure Quest</h1>
+            
+            <!-- AI-generated scenario display -->
+            <div id="game-scenario"></div>
 
-        <!-- Multiple-choice options -->
-        <div id="game-options">
-            <p><strong>Choose an action:</strong></p>
-            <ul id="options-list"></ul>
+            <!-- Multiple-choice options -->
+            <div id="game-options">
+                <p><strong>Choose an action:</strong></p>
+                <ul id="options-list"></ul>
+            </div>
+
+            <!-- Custom user input -->
+            <input type="text" id="user-input" placeholder="Or type your own action...">
+            <button id="submit-btn">Submit</button>
         </div>
 
-        <!-- Custom user input -->
-        <input type="text" id="user-input" placeholder="Or type your own action...">
-        <button id="submit-btn">Submit</button>
+        <!-- Image Display Section -->
+        <div class="image-container">
+            <h2>Scene Visuals</h2>
+            <div class="image-category">
+                <h3>Environment</h3>
+                <img id="environment-image" alt="Environment">
+            </div>
+            <div class="image-category">
+                <h3>Items</h3>
+                <img id="item-image" alt="Items">
+            </div>
+            <div class="image-category">
+                <h3>Characters</h3>
+                <img id="character-image" alt="Characters">
+            </div>
+        </div>
     </div>
 
     <script>
@@ -56,8 +76,11 @@
                 let aiMessage = `<p class="scenario-text">${formattedScenario}</p>`;
                 gameScenario.innerHTML = aiMessage + gameScenario.innerHTML;
 
-                // Update options
-                if (data.options.length > 0) {
+                // Update images dynamically
+                updateSceneImages(data.images);
+
+                // Ensure options always appear
+                if (data.options && data.options.length > 0) {
                     optionsList.innerHTML = "";
                     data.options.forEach(option => {
                         let li = document.createElement("li");
@@ -67,14 +90,48 @@
                         li.appendChild(button);
                         optionsList.appendChild(li);
                     });
+                } else {
+                    optionsList.innerHTML = "<li>No options available.</li>";
                 }
             })
             .catch(error => console.error("Error:", error));
         }
 
         function formatNPCDialogue(text) {
-            return text.replace(/"([^"]+)"/g, '<span class="npc-dialogue">"$1"</span>');
+            return text.replace(/(?:\n|^)([^:]+):\s*“([^”]+)”/g, '<span class="npc-dialogue"><strong>$1:</strong> "$2"</span>');
         }
+
+
+
+        function updateSceneImages(images) {
+    if (images) {
+        let envImg = document.getElementById("environment-image");
+        let itemImg = document.getElementById("item-image");
+        let charImg = document.getElementById("character-image");
+
+        if (images.environment) {
+            envImg.src = `/static/images/${images.environment}`;
+            envImg.style.display = "block";
+        } else {
+            envImg.style.display = "none";
+        }
+
+        if (images.item) {
+            itemImg.src = `/static/images/${images.item}`;
+            itemImg.style.display = "block";
+        } else {
+            itemImg.style.display = "none";
+        }
+
+        if (images.character) {
+            charImg.src = `/static/images/${images.character}`;
+            charImg.style.display = "block";
+        } else {
+            charImg.style.display = "none";
+        }
+    }
+}
+
 
         // Initial API call to start the game
         sendChoice("Start");
