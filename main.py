@@ -1,22 +1,20 @@
 import os
 import sqlite3
-import re  # Import regex for dialogue formatting
+import re
 from flask import Flask, render_template, request, jsonify
 import requests
-import random  # Controls probability of NPC introduction
+import random  
+import time  # For retrying API calls on rate limits
 
 app = Flask(__name__, static_folder='static', static_url_path='/static')
 
 # Retrieve API key from environment variables
 API_KEY = os.getenv("API_KEY")
-
-# Mistral API URL
 MISTRAL_API_URL = "https://api.mistral.ai/v1/chat/completions"
 
-# Store conversation history to maintain story continuity
 conversation_history = []
 
-# ✅ Function to query images from the SQLite database
+# ✅ Query images from the SQLite database
 def get_image_suggestions(scenario_text):
     db_path = "data/images.db"
     conn = sqlite3.connect(db_path)
@@ -29,7 +27,6 @@ def get_image_suggestions(scenario_text):
     images = cursor.fetchall()
     conn.close()
 
-    # Default to "unknown.png" if no matches are found
     selected_images = {
         "environment": "unknown.png",
         "item": "unknown.png",
@@ -43,66 +40,112 @@ def get_image_suggestions(scenario_text):
 
     return selected_images
 
-# ✅ Function to format NPC dialogues properly
+# ✅ Format NPC dialogue into block quotes (Soft limit: 1 NPC quote)
 def format_npc_dialogue(text):
-    """Ensures only properly structured NPC dialogues are formatted"""
-    return re.sub(r'(\b[A-Za-z]+):\s*"([^"]+)"', r'<span class="npc-dialogue"><strong>\1:</strong> “\2”</span>', text)
+    """Ensures NPC dialogue is formatted and applies a soft limit of one quote per scenario."""
+    matches = re.findall(r'(\b[A-Za-z]+):\s*"([^"]+)"', text)
 
-# Function to get AI response from Mistral API
-def get_ai_response(prompt):
-    try:
-        headers = {
-            "Authorization": f"Bearer {API_KEY}",
-            "Content-Type": "application/json"
-        }
-
-        # Randomly decide whether to introduce an NPC (40% chance)
-        introduce_npc = random.random() < 0.4  
-
-        # Construct a rolling history for context
-        history_context = "\n".join(conversation_history[-5:])  # Keep last 5 exchanges for continuity
-
-        # AI prompt instructions (Enforce text length & proper formatting)
-        system_prompt = (
-            "You are a text adventure game master. Generate a short, engaging scenario (~30% shorter than usual) "
-            "that follows logically from the player's input. Keep NPC dialogue to a MAXIMUM of 1-2 exchanges before presenting options. "
-            "Ensure the response is no longer than 150 words to keep pacing tight. "
-            "STRICTLY separate the scenario from player options. NEVER embed choices inside the scenario text. "
-            "Options must be listed in a new paragraph starting with 'Options:'. "
-            "Each choice must be a standalone sentence without numbering or bullets."
-            "DO NOT append extra words after 'Options:'. "
-            "DO NOT include 'Scenario:' or any introduction text like 'Welcome to the game!'."
+    if matches:
+        # Keep only the first valid NPC quote
+        formatted_text = re.sub(
+            r'(\b[A-Za-z]+):\s*"([^"]+)"', 
+            r'<span class="npc-dialogue"><strong>\1:</strong> “\2”</span>', 
+            text, count=1
         )
+        # Remove any additional quotes beyond the first one
+        formatted_text = re.sub(r'(\b[A-Za-z]+):\s*"([^"]+)"', r'\1: “...”', formatted_text)
+        return formatted_text
+    return text
 
-        if introduce_npc:
-            system_prompt += (
-                " Introduce an NPC naturally but limit their dialogue to **1-2 lines**. "
-                "Ensure 'Options:' is **always placed at the end**."
-            )
+# ✅ Mistral API Request with retry mechanism (Handles 429 Rate Limits)
+def request_mistral(payload):
+    retries = 3
+    for attempt in range(retries):
+        try:
+            response = requests.post(MISTRAL_API_URL, headers={
+                "Authorization": f"Bearer {API_KEY}",
+                "Content-Type": "application/json"
+            }, json=payload)
 
-        # Format final AI input
-        final_prompt = f"Previous Events:\n{history_context}\n\nCurrent Action: {prompt}\n\nWhat happens next?"
+            if response.status_code == 200:
+                return response.json()["choices"][0]["message"]["content"].strip()
 
-        payload = {
-            "model": "mistral-small",
-            "messages": [
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": final_prompt}
-            ],
-            "max_tokens": 250
-        }
+            elif response.status_code == 429:  # Rate limit exceeded
+                wait_time = 2 ** attempt  # Exponential backoff
+                print(f"Rate limit exceeded. Retrying in {wait_time} seconds...")
+                time.sleep(wait_time)
+                continue  
 
-        response = requests.post(MISTRAL_API_URL, headers=headers, json=payload)
+            else:
+                print(f"Error: {response.status_code} - {response.text}")
+                return None  
 
-        if response.status_code == 200:
-            return response.json()["choices"][0]["message"]["content"]
-        else:
-            print(f"Error: {response.status_code} - {response.text}")
-            return "Error: Unable to generate response from AI."
+        except Exception as e:
+            print(f"Server error: {e}")
+            return None  
+    return None  
 
-    except Exception as e:
-        print(f"Server error: {e}")
-        return "Error: Something went wrong."
+# ✅ Generate AI scenario **without** options, enforcing the soft limit on NPC quotes
+def get_scenario(prompt):
+    history_context = "\n".join(conversation_history[-10:])  
+
+    system_prompt = (
+        "You are a text adventure game master. Generate a **complete, standalone** scenario that follows logically from the player's input. "
+        "Limit NPC dialogue to **one short response only (1-2 lines max)** before stopping. "
+        "Ensure the scenario is **no longer than 120 words** to maintain fast pacing. "
+        "STRICTLY separate the scenario from player options. DO NOT include player choices, 'Options:', or action prompts. "
+        "DO NOT use repetitive phrases like 'To be continued' or 'What happens next?'. "
+        "NEVER repeat 'Your adventure has begun' or similar redundant statements."
+    )
+
+    final_prompt = f"Previous Events:\n{history_context}\n\nCurrent Action: {prompt}\n\nWhat happens next?"
+
+    payload = {
+        "model": "mistral-small",
+        "messages": [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": final_prompt}
+        ],
+        "max_tokens": 200
+    }
+
+    scenario_text = request_mistral(payload)
+
+    if scenario_text:
+        return scenario_text.split("\nOptions:")[0].strip()  # Ensure "Options:" never appears in scenario
+    return None
+
+# ✅ Generate AI-generated options **separately**
+def get_options(scenario_text):
+    system_prompt = (
+        "You are a text adventure game master. Generate **exactly 3-4 concise choices** based on the scenario. "
+        "Each choice must be **short, distinct, and action-driven** (10 words max). "
+        "DO NOT include 'Options:', numbers, or bullets. "
+        "DO NOT suggest passive options like 'Wait and observe'."
+    )
+
+    final_prompt = f"Scenario:\n{scenario_text}\n\nWhat are the possible actions the player can take?"
+
+    payload = {
+        "model": "mistral-small",
+        "messages": [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": final_prompt}
+        ],
+        "max_tokens": 80
+    }
+
+    options_text = request_mistral(payload)
+
+    if options_text:
+        options = [opt.strip("- ").strip().lstrip("0123456789. ") for opt in options_text.split("\n") if opt.strip()]
+        options = [opt for opt in options if len(opt.split()) <= 8]  
+
+        while len(options) < 3:
+            options.append(random.choice(["Explore further", "Look around", "Wait"]))
+
+        return options[:4]
+    return ["Explore further", "Look around", "Wait"]
 
 @app.route("/")
 def index():
@@ -117,57 +160,37 @@ def play():
         if not user_input:
             return jsonify({
                 "scenario": "Please enter a valid action.",
-                "options": [],
+                "options": ["Explore further", "Look around", "Wait"],
                 "images": {"environment": "unknown.png", "item": "unknown.png", "character": "unknown.png"}
             })
 
         formatted_user_input = user_input.lstrip("0123456789. ")
         formatted_user_input = f"You {formatted_user_input[0].lower()}{formatted_user_input[1:]}"
 
-        ai_response = get_ai_response(f"{formatted_user_input}. What happens next?")
+        ai_scenario = get_scenario(f"{formatted_user_input}. What happens next?")
+        if not ai_scenario:
+            return jsonify({
+                "scenario": "Error generating scenario. Please try again.",
+                "options": ["Explore further", "Look around", "Wait"],
+                "images": {"environment": "unknown.png", "item": "unknown.png", "character": "unknown.png"}
+            })
 
-        scenario_text = ai_response.strip()
-        options_text = ""
+        scenario_text = format_npc_dialogue(ai_scenario)
 
-        # ✅ Enforce proper scenario and option separation
-        if "\nOptions:" in scenario_text:
-            split_parts = scenario_text.rsplit("\nOptions:", 1)
-            scenario_text = split_parts[0].strip()
-            options_text = split_parts[1].strip() if len(split_parts) > 1 else ""
+        options = get_options(scenario_text)
 
-        # ✅ Clean up response formatting
-        scenario_text = scenario_text.replace("Start", "").replace("Welcome to the game!", "").strip()
-        scenario_text = scenario_text.replace("Scenario:", "").strip()
-
-        # ✅ Format NPC dialogue properly
-        scenario_text = format_npc_dialogue(scenario_text)
-
-        # ✅ Ensure options are clean and formatted correctly
-        options = [opt.strip("- ").strip().lstrip("0123456789. ") for opt in options_text.split("\n") if opt.strip()]
-        options = [opt for opt in options if "Options" not in opt]
-
-        # ✅ Ensure at least 3 options are present
-        options = [opt for opt in options if len(opt.split()) > 3]
-        while len(options) < 3:
-            options.append(random.choice(["Explore further", "Look around carefully", "Wait and observe"]))
-
-        # ✅ Get separate images for environment, item, and character
         images = get_image_suggestions(scenario_text)
 
-        # 🔹 Debugging: Print selected images to verify Flask is working correctly
-        print(f"DEBUG: Selected images: {images}")
-
-        # ✅ Maintain history while keeping it concise
         conversation_history.append(f"Player: {formatted_user_input}\nResponse: {scenario_text}")
-        conversation_history[-10:]  # Keep only the last 10 exchanges
+        conversation_history[-10:]
 
-        return jsonify({"scenario": scenario_text, "options": options[:4], "images": images})
+        return jsonify({"scenario": scenario_text, "options": options, "images": images})
 
     except Exception as e:
         print(f"Server error: {e}")
         return jsonify({
             "scenario": "Server error. Please try again.",
-            "options": ["Explore further", "Look around carefully", "Wait and observe"],
+            "options": ["Explore further", "Look around", "Wait"],
             "images": {"environment": "unknown.png", "item": "unknown.png", "character": "unknown.png"}
         }), 500
 
